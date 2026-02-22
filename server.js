@@ -20,10 +20,13 @@ const BUILD_TOOLS = path.join(ANDROID_HOME, 'build-tools', '33.0.2');
 ['apks', 'builds', 'keystore'].forEach(d => {
   if (!fs.existsSync(path.join(__dirname, d))) fs.mkdirSync(path.join(__dirname, d), { recursive: true });
 });
-// Toujours régénérer le template au démarrage
 generateTemplate();
 
-// ===== POST /generate =====
+// ===== ROUTES =====
+app.get('/', (req, res) => {
+  res.json({ service: 'Co-Activ APK Builder', status: 'running' });
+});
+
 app.post('/generate', async (req, res) => {
   const { site_id, site_name } = req.body;
   if (!site_id || !site_name) return res.status(400).json({ error: 'site_id et site_name requis' });
@@ -32,7 +35,7 @@ app.post('/generate', async (req, res) => {
   const apkPath = path.join(APK_DIR, `coactiv-${safeId}.apk`);
   const errPath = path.join(APK_DIR, `coactiv-${safeId}.error`);
 
-  // Nettoyer l'ancien fichier erreur
+  // Nettoyer ancien fichier erreur
   if (fs.existsSync(errPath)) fs.unlinkSync(errPath);
 
   if (fs.existsSync(apkPath)) {
@@ -40,26 +43,21 @@ app.post('/generate', async (req, res) => {
   }
 
   res.json({ success: true, status: 'building', status_url: `/status/${safeId}` });
-
-  // Build en arrière-plan
   buildApk(safeId, site_id, site_name).catch(e => console.error('[BUILD]', e.message));
 });
 
-// ===== GET /download/:id =====
 app.get('/download/:siteId', (req, res) => {
   const safeId = req.params.siteId.replace(/[^a-zA-Z0-9_-]/g, '');
   const apkPath = path.join(APK_DIR, `coactiv-${safeId}.apk`);
-  if (!fs.existsSync(apkPath)) return res.status(404).json({ error: 'APK non trouvé' });
+  if (!fs.existsSync(apkPath)) return res.status(404).json({ error: 'APK non trouve' });
   res.setHeader('Content-Type', 'application/vnd.android.package-archive');
   res.download(apkPath, `CoActiv-${safeId}.apk`);
 });
 
-// ===== GET /status/:id =====
 app.get('/status/:siteId', (req, res) => {
   const safeId = req.params.siteId.replace(/[^a-zA-Z0-9_-]/g, '');
   const apkPath = path.join(APK_DIR, `coactiv-${safeId}.apk`);
   const errPath = path.join(APK_DIR, `coactiv-${safeId}.error`);
-  
   if (fs.existsSync(apkPath)) {
     const s = fs.statSync(apkPath);
     return res.json({ site_id: safeId, status: 'ready', download_url: `/download/${safeId}`, size_mb: (s.size/1048576).toFixed(1) });
@@ -73,7 +71,6 @@ app.get('/status/:siteId', (req, res) => {
   res.json({ site_id: safeId, status: 'not_found' });
 });
 
-// ===== GET /list =====
 app.get('/list', (req, res) => {
   const files = fs.readdirSync(APK_DIR).filter(f => f.endsWith('.apk'));
   res.json({ count: files.length, apks: files.map(f => ({
@@ -82,35 +79,24 @@ app.get('/list', (req, res) => {
   }))});
 });
 
-// ===== GET / =====
-app.get('/', (req, res) => {
-  res.json({ service: 'Co-Activ APK Builder', status: 'running' });
-});
-
-// ===== BUILD FUNCTION =====
+// ===== BUILD =====
 async function buildApk(safeId, siteId, siteName) {
   const buildDir = path.join(__dirname, 'builds', safeId);
   const apkPath = path.join(APK_DIR, `coactiv-${safeId}.apk`);
   const url = `https://co-activ.netlify.app/push.html?site=${siteId}`;
-  const pkgId = `com.coactiv.push.${safeId.replace(/-/g, '_')}`;
 
-  console.log(`\n🔨 BUILD: ${siteName} (${safeId})`);
+  console.log(`\n=== BUILD: ${siteName} (${safeId}) ===`);
 
   try {
     if (fs.existsSync(buildDir)) fs.rmSync(buildDir, { recursive: true });
     copyDir(ANDROID_DIR, buildDir);
 
-    // Patch les placeholders
-    replaceIn(path.join(buildDir, 'app/build.gradle'), 'PLACEHOLDER_PACKAGE_ID', pkgId);
-    replaceIn(path.join(buildDir, 'app/src/main/AndroidManifest.xml'), 'PLACEHOLDER_PACKAGE_ID', pkgId);
+    // Patch uniquement URL et nom (PAS le package)
     replaceIn(path.join(buildDir, 'app/src/main/AndroidManifest.xml'), 'PLACEHOLDER_APP_NAME', `Co-Activ ${siteName}`);
     replaceIn(path.join(buildDir, 'app/src/main/java/com/coactiv/push/MainActivity.java'), 'PLACEHOLDER_URL', url);
 
-    // L'icône est déjà dans le template
-
-    // Compilation
     const androidJar = findAndroidJar();
-    if (!androidJar) throw new Error('android.jar introuvable');
+    if (!androidJar) throw new Error('android.jar not found');
 
     const srcMain = path.join(buildDir, 'app/src/main');
     const out = path.join(buildDir, 'output');
@@ -119,52 +105,57 @@ async function buildApk(safeId, siteId, siteName) {
     const classesDir = path.join(out, 'classes');
     [out, compiledRes, rJavaDir, classesDir].forEach(d => fs.mkdirSync(d, { recursive: true }));
 
-    // 1. aapt2 compile
-    console.log('  → aapt2 compile');
+    // 1. aapt2 compile resources
+    console.log('  1. aapt2 compile');
     const resFiles = getAllFiles(path.join(srcMain, 'res')).filter(f => !f.includes('.DS_Store'));
     for (const f of resFiles) {
       try { execSync(`${BUILD_TOOLS}/aapt2 compile "${f}" -o "${compiledRes}"`, { stdio: 'pipe' }); } catch(e) {}
     }
 
     // 2. aapt2 link
-    console.log('  → aapt2 link');
+    console.log('  2. aapt2 link');
     const flats = fs.readdirSync(compiledRes).filter(f => f.endsWith('.flat')).map(f => `"${path.join(compiledRes, f)}"`).join(' ');
     const linkedApk = path.join(out, 'linked.apk');
-    execSync(`${BUILD_TOOLS}/aapt2 link -o "${linkedApk}" -I "${androidJar}" --manifest "${path.join(srcMain, 'AndroidManifest.xml')}" --java "${rJavaDir}" ${flats} --allow-reserved-package-id`, { stdio: 'pipe' });
+    execSync(`${BUILD_TOOLS}/aapt2 link -o "${linkedApk}" -I "${androidJar}" --manifest "${path.join(srcMain, 'AndroidManifest.xml')}" --java "${rJavaDir}" ${flats}`, { stdio: 'pipe' });
 
-    // 3. javac
-    console.log('  → javac');
+    // 3. javac - compile ONLY from classesDir to avoid duplicates
+    console.log('  3. javac');
     const javaFile = path.join(srcMain, 'java/com/coactiv/push/MainActivity.java');
     const rJavaFiles = getAllFiles(rJavaDir).filter(f => f.endsWith('.java'));
     const allJava = [javaFile, ...rJavaFiles].map(f => `"${f}"`).join(' ');
     execSync(`javac -encoding UTF-8 -source 1.8 -target 1.8 -cp "${androidJar}" -d "${classesDir}" ${allJava}`, { stdio: 'pipe' });
 
-    // 4. d8 (dex)
-    console.log('  → d8');
+    // 4. d8 - convert to dex
+    console.log('  4. d8');
     const classFiles = getAllFiles(classesDir).filter(f => f.endsWith('.class')).map(f => `"${f}"`).join(' ');
-    execSync(`${BUILD_TOOLS}/d8 --lib "${androidJar}" --output "${out}" ${classFiles}`, { stdio: 'pipe' });
+    const dexOut = path.join(out, 'dex');
+    fs.mkdirSync(dexOut, { recursive: true });
+    execSync(`${BUILD_TOOLS}/d8 --lib "${androidJar}" --output "${dexOut}" ${classFiles}`, { stdio: 'pipe' });
 
-    // 5. Assembler
-    console.log('  → Assemblage');
+    // 5. Build APK
+    console.log('  5. Assemble APK');
     const unsignedApk = path.join(out, 'unsigned.apk');
     fs.copyFileSync(linkedApk, unsignedApk);
-    execSync(`cd "${out}" && zip -j "${unsignedApk}" classes.dex`, { stdio: 'pipe' });
+    const dexFile = path.join(dexOut, 'classes.dex');
+    if (fs.existsSync(dexFile)) {
+      execSync(`cd "${dexOut}" && zip -j "${unsignedApk}" classes.dex`, { stdio: 'pipe' });
+    }
 
     // 6. zipalign
-    console.log('  → zipalign');
+    console.log('  6. zipalign');
     const alignedApk = path.join(out, 'aligned.apk');
     execSync(`${BUILD_TOOLS}/zipalign -f 4 "${unsignedApk}" "${alignedApk}"`, { stdio: 'pipe' });
 
-    // 7. apksigner
-    console.log('  → apksigner');
+    // 7. sign
+    console.log('  7. apksigner');
     const signedApk = path.join(out, 'signed.apk');
     execSync(`${BUILD_TOOLS}/apksigner sign --ks "${KEYSTORE_PATH}" --ks-key-alias coactiv --ks-pass pass:${KEYSTORE_PASS} --key-pass pass:${KEYSTORE_PASS} --out "${signedApk}" "${alignedApk}"`, { stdio: 'pipe' });
 
     fs.copyFileSync(signedApk, apkPath);
-    console.log(`✅ BUILD OK: ${apkPath} (${(fs.statSync(apkPath).size/1048576).toFixed(1)} Mo)`);
+    console.log(`=== BUILD OK: ${(fs.statSync(apkPath).size/1048576).toFixed(1)} Mo ===`);
 
   } catch(err) {
-    console.error(`❌ BUILD FAIL ${safeId}:`, err.message);
+    console.error(`=== BUILD FAIL ${safeId}: ${err.message} ===`);
     fs.writeFileSync(path.join(APK_DIR, `coactiv-${safeId}.error`), JSON.stringify({ error: err.message }));
   } finally {
     try { if (fs.existsSync(buildDir)) fs.rmSync(buildDir, { recursive: true, force: true }); } catch(e) {}
@@ -203,4 +194,4 @@ function getAllFiles(dir, files = []) {
   return files;
 }
 
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 APK Builder sur port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`APK Builder running on port ${PORT}`));
