@@ -18,7 +18,6 @@ function generateTemplate() {
   // Structure du projet Android minimal
   const dirs = [
     'app/src/main/java/com/coactiv/push',
-    'app/src/main/res/layout',
     'app/src/main/res/values',
     'app/src/main/res/mipmap-hdpi',
     'app/src/main/res/mipmap-mdpi',
@@ -142,12 +141,10 @@ dependencies {
 </manifest>`);
 
   // MainActivity.java
-  fs.writeFileSync(path.join(ANDROID_DIR, 'app/src/main/java/com/coactiv/push/MainActivity.java'), `
-package com.coactiv.push;
+  fs.writeFileSync(path.join(ANDROID_DIR, 'app/src/main/java/com/coactiv/push/MainActivity.java'), `package com.coactiv.push;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.WebView;
@@ -175,7 +172,7 @@ public class MainActivity extends Activity {
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
         
-        // Barre de statut sombre
+        // Status bar
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             getWindow().setStatusBarColor(0xFF1a1a2e);
         }
@@ -212,7 +209,7 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(PermissionRequest request) {
-                // Accepter les permissions (notifications, etc.)
+                // Accept permissions
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     request.grant(request.getResources());
                 }
