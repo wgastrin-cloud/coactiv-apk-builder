@@ -84,7 +84,7 @@ android {
     compileSdkVersion 33
     
     defaultConfig {
-        applicationId "PLACEHOLDER_PACKAGE_ID"
+        applicationId "com.coactiv.push"
         minSdkVersion 21
         targetSdkVersion 33
         versionCode 1
@@ -102,17 +102,12 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
 }
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.webkit:webkit:1.7.0'
-}
 `);
 
   // AndroidManifest.xml
   fs.writeFileSync(path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml'), `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="PLACEHOLDER_PACKAGE_ID">
+    package="com.coactiv.push">
     
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
