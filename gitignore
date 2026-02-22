@@ -1,0 +1,5 @@
+node_modules/
+apks/
+builds/
+keystore/
+.env
