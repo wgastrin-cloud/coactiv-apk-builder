@@ -252,7 +252,69 @@ public class MainActivity extends Activity {
     </domain-config>
 </network-security-config>`);
 
+  // Icône par défaut (48x48 PNG vert avec "C")
+  const defaultIcon = createDefaultIcon();
+  ['mipmap-hdpi', 'mipmap-mdpi', 'mipmap-xhdpi', 'mipmap-xxhdpi', 'mipmap-xxxhdpi'].forEach(d => {
+    fs.writeFileSync(path.join(ANDROID_DIR, 'app/src/main/res', d, 'ic_launcher.png'), defaultIcon);
+  });
+
   console.log('✅ Template Android créé');
+}
+
+// Créer un PNG minimal valide (1x1 pixel vert)
+function createDefaultIcon() {
+  // PNG minimal 48x48 vert (#16a34a)
+  const width = 48, height = 48;
+  
+  // Construction manuelle d'un PNG
+  function crc32(buf) {
+    let c, crcTable = [];
+    for (let n = 0; n < 256; n++) {
+      c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      crcTable[n] = c;
+    }
+    let crc = 0xffffffff;
+    for (let i = 0; i < buf.length; i++) crc = crcTable[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function chunk(type, data) {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const typeAndData = Buffer.concat([Buffer.from(type), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(typeAndData));
+    return Buffer.concat([len, typeAndData, crc]);
+  }
+
+  // IHDR
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type RGB
+  ihdr[10] = 0; // compression
+  ihdr[11] = 0; // filter
+  ihdr[12] = 0; // interlace
+
+  // IDAT - raw image data (green pixels)
+  const rawData = [];
+  for (let y = 0; y < height; y++) {
+    rawData.push(0); // filter none
+    for (let x = 0; x < width; x++) {
+      rawData.push(0x16, 0xa3, 0x4a); // #16a34a green
+    }
+  }
+  const zlib = require('zlib');
+  const compressed = zlib.deflateSync(Buffer.from(rawData));
+
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdrChunk = chunk('IHDR', ihdr);
+  const idatChunk = chunk('IDAT', compressed);
+  const iendChunk = chunk('IEND', Buffer.alloc(0));
+
+  return Buffer.concat([signature, ihdrChunk, idatChunk, iendChunk]);
 }
 
 module.exports = { generateTemplate, ANDROID_DIR, TEMPLATE_DIR };
