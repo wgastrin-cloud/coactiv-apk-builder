@@ -97,6 +97,7 @@ async function buildApk(safeId, siteId, siteName) {
 
     // Patch les placeholders
     replaceIn(path.join(buildDir, 'app/build.gradle'), 'PLACEHOLDER_PACKAGE_ID', pkgId);
+    replaceIn(path.join(buildDir, 'app/src/main/AndroidManifest.xml'), 'PLACEHOLDER_PACKAGE_ID', pkgId);
     replaceIn(path.join(buildDir, 'app/src/main/AndroidManifest.xml'), 'PLACEHOLDER_APP_NAME', `Co-Activ ${siteName}`);
     replaceIn(path.join(buildDir, 'app/src/main/java/com/coactiv/push/MainActivity.java'), 'PLACEHOLDER_URL', url);
 
