@@ -133,7 +133,7 @@ async function buildApk(safeId, siteId, siteName) {
     const javaFile = path.join(srcMain, 'java/com/coactiv/push/MainActivity.java');
     const rJavaFiles = getAllFiles(rJavaDir).filter(f => f.endsWith('.java'));
     const allJava = [javaFile, ...rJavaFiles].map(f => `"${f}"`).join(' ');
-    execSync(`javac -source 1.8 -target 1.8 -cp "${androidJar}" -d "${classesDir}" ${allJava}`, { stdio: 'pipe' });
+    execSync(`javac -encoding UTF-8 -source 1.8 -target 1.8 -cp "${androidJar}" -d "${classesDir}" ${allJava}`, { stdio: 'pipe' });
 
     // 4. d8 (dex)
     console.log('  → d8');
