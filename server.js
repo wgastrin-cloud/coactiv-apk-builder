@@ -20,7 +20,8 @@ const BUILD_TOOLS = path.join(ANDROID_HOME, 'build-tools', '33.0.2');
 ['apks', 'builds', 'keystore'].forEach(d => {
   if (!fs.existsSync(path.join(__dirname, d))) fs.mkdirSync(path.join(__dirname, d), { recursive: true });
 });
-if (!fs.existsSync(ANDROID_DIR)) generateTemplate();
+// Toujours régénérer le template au démarrage
+generateTemplate();
 
 // ===== POST /generate =====
 app.post('/generate', async (req, res) => {
@@ -101,14 +102,7 @@ async function buildApk(safeId, siteId, siteName) {
     replaceIn(path.join(buildDir, 'app/src/main/AndroidManifest.xml'), 'PLACEHOLDER_APP_NAME', `Co-Activ ${siteName}`);
     replaceIn(path.join(buildDir, 'app/src/main/java/com/coactiv/push/MainActivity.java'), 'PLACEHOLDER_URL', url);
 
-    // Icône
-    try {
-      execSync(`wget -q -O "${path.join(buildDir, 'app/src/main/res/mipmap-xxxhdpi/ic_launcher.png')}" "https://co-activ.netlify.app/icon.png"`, { timeout: 10000 });
-      const iconSrc = path.join(buildDir, 'app/src/main/res/mipmap-xxxhdpi/ic_launcher.png');
-      ['mipmap-hdpi','mipmap-mdpi','mipmap-xhdpi','mipmap-xxhdpi'].forEach(d => {
-        fs.copyFileSync(iconSrc, path.join(buildDir, 'app/src/main/res', d, 'ic_launcher.png'));
-      });
-    } catch(e) { console.log('⚠️ Icône par défaut'); }
+    // L'icône est déjà dans le template
 
     // Compilation
     const androidJar = findAndroidJar();
