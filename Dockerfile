@@ -1,8 +1,17 @@
 FROM node:18-bullseye
 
 RUN apt-get update && \
-    apt-get install -y openjdk-11-jdk-headless wget unzip zip && \
+    apt-get install -y wget unzip zip && \
     rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/java && \
+    cd /opt/java && \
+    wget -q "https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-x64_bin.tar.gz" -O jdk.tar.gz && \
+    tar xzf jdk.tar.gz && \
+    rm jdk.tar.gz
+
+ENV JAVA_HOME=/opt/java/jdk-17.0.12
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 ENV ANDROID_HOME=/opt/android-sdk
 ENV PATH="${PATH}:${ANDROID_HOME}/build-tools/33.0.2:${ANDROID_HOME}/cmdline-tools/latest/bin"
