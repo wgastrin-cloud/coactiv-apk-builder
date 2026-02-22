@@ -30,6 +30,10 @@ app.post('/generate', async (req, res) => {
 
   const safeId = site_id.replace(/[^a-zA-Z0-9_-]/g, '');
   const apkPath = path.join(APK_DIR, `coactiv-${safeId}.apk`);
+  const errPath = path.join(APK_DIR, `coactiv-${safeId}.error`);
+
+  // Nettoyer l'ancien fichier erreur
+  if (fs.existsSync(errPath)) fs.unlinkSync(errPath);
 
   if (fs.existsSync(apkPath)) {
     return res.json({ success: true, status: 'ready', download_url: `/download/${safeId}` });
