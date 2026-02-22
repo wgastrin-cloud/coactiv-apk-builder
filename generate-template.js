@@ -168,7 +168,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Plein écran
+        // Plein ecran
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
@@ -192,7 +192,7 @@ public class MainActivity extends Activity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         
-        // User Agent personnalisé
+        // User Agent custom
         String ua = settings.getUserAgentString();
         settings.setUserAgentString(ua + " CoActiv-App/1.0");
         
@@ -202,7 +202,7 @@ public class MainActivity extends Activity {
                 if (url.contains("co-activ.netlify.app")) {
                     return false; // Reste dans l'app
                 }
-                // Liens externes → ouvrir dans le navigateur
+                // Liens externes - ouvrir dans le navigateur
                 Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                 startActivity(intent);
                 return true;
