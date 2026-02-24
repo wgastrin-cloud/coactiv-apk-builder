@@ -135,22 +135,12 @@ async function buildApk(safeId, siteId, siteName) {
     console.log('     Produced ' + classFiles.length + ' class files:');
     classFiles.forEach(f => console.log('       ' + f.replace(CLASSES, '')));
 
-    // 4. d8 - convert .class to .dex
-    // IMPORTANT: no --classpath flag, just pass unique class files
+    // 4. d8 - convert .class to .dex via JAR (avoids duplicate class issues)
     console.log('  [4/7] d8');
-    var uniqueClasses = [];
-    var seenNames = {};
-    for (var ci = 0; ci < classFiles.length; ci++) {
-      var basename = path.basename(classFiles[ci]);
-      if (!seenNames[basename]) {
-        seenNames[basename] = true;
-        uniqueClasses.push(classFiles[ci]);
-      } else {
-        console.log('     SKIP duplicate: ' + basename);
-      }
-    }
-    console.log('     Passing ' + uniqueClasses.length + ' unique class files to d8');
-    execSync(BUILD_TOOLS + '/d8 --lib "' + androidJar + '" --output "' + DEX + '" ' + uniqueClasses.map(f => '"' + f + '"').join(' '), { stdio: 'pipe' });
+    var jarFile = path.join(B, 'classes.jar');
+    execSync('cd "' + CLASSES + '" && jar cf "' + jarFile + '" .', { stdio: 'pipe' });
+    console.log('     Created classes.jar: ' + (fs.statSync(jarFile).size / 1024).toFixed(1) + ' KB');
+    execSync(BUILD_TOOLS + '/d8 --lib "' + androidJar + '" --output "' + DEX + '" "' + jarFile + '"', { stdio: 'pipe' });
 
     // 5. Assemble APK (add classes.dex to linked.apk)
     console.log('  [5/7] assemble');
