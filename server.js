@@ -130,7 +130,7 @@ function buildApk(safeId, siteId, siteName) {
     console.log('  Found ' + flatFiles.length + ' flat files');
     var flatArgs = flatFiles.map(function(f) { return '"' + path.join(CRES, f) + '"'; }).join(' ');
     var linkedApk = path.join(B, 'linked.apk');
-    execSync(BUILD_TOOLS + '/aapt2 link -o "' + linkedApk + '" -I "' + androidJar + '" --manifest "' + path.join(B, 'AndroidManifest.xml') + '" --java "' + RJAVA + '" ' + flatArgs, { stdio: 'pipe' });
+    execSync(BUILD_TOOLS + '/aapt2 link -o "' + linkedApk + '" -I "' + androidJar + '" --manifest "' + path.join(B, 'AndroidManifest.xml') + '" --java "' + RJAVA + '" --min-sdk-version 21 --target-sdk-version 33 --version-code 1 --version-name 1.0 ' + flatArgs, { stdio: 'pipe' });
     console.log('  linked.apk: ' + fs.statSync(linkedApk).size + ' bytes');
 
     // Step 3: javac
