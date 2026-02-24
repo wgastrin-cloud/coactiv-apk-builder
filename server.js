@@ -17,154 +17,197 @@ const ANDROID_HOME = process.env.ANDROID_HOME || '/opt/android-sdk';
 const BUILD_TOOLS = path.join(ANDROID_HOME, 'build-tools', '33.0.2');
 
 ['apks', 'builds', 'keystore'].forEach(d => {
-  const p = path.join(__dirname, d);
+  var p = path.join(__dirname, d);
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 });
 generateTemplate();
 
-// --- Routes ---
-app.get('/', (req, res) => res.json({ service: 'Co-Activ APK Builder', status: 'running' }));
+// Routes
+app.get('/', function(req, res) { res.json({ service: 'Co-Activ APK Builder', status: 'running' }); });
 
-app.post('/generate', async (req, res) => {
-  const { site_id, site_name } = req.body;
+app.post('/generate', function(req, res) {
+  var site_id = req.body.site_id;
+  var site_name = req.body.site_name;
   if (!site_id || !site_name) return res.status(400).json({ error: 'site_id et site_name requis' });
-  const safeId = site_id.replace(/[^a-zA-Z0-9_-]/g, '');
-  const apkPath = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
-  const errPath = path.join(APK_DIR, 'coactiv-' + safeId + '.error');
+  var safeId = site_id.replace(/[^a-zA-Z0-9_-]/g, '');
+  var apkPath = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
+  var errPath = path.join(APK_DIR, 'coactiv-' + safeId + '.error');
   if (fs.existsSync(errPath)) fs.unlinkSync(errPath);
   if (fs.existsSync(apkPath)) return res.json({ success: true, status: 'ready', download_url: '/download/' + safeId });
   res.json({ success: true, status: 'building', status_url: '/status/' + safeId });
-  buildApk(safeId, site_id, site_name).catch(e => console.error('[BUILD ERR]', e.message));
+  buildApk(safeId, site_id, site_name);
 });
 
-app.get('/download/:id', (req, res) => {
-  const safeId = req.params.id.replace(/[^a-zA-Z0-9_-]/g, '');
-  const p = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
+app.get('/download/:id', function(req, res) {
+  var safeId = req.params.id.replace(/[^a-zA-Z0-9_-]/g, '');
+  var p = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
   if (!fs.existsSync(p)) return res.status(404).json({ error: 'not found' });
   res.download(p, 'CoActiv-' + safeId + '.apk');
 });
 
-app.get('/status/:id', (req, res) => {
-  const safeId = req.params.id.replace(/[^a-zA-Z0-9_-]/g, '');
-  const apkPath = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
-  const errPath = path.join(APK_DIR, 'coactiv-' + safeId + '.error');
+app.get('/status/:id', function(req, res) {
+  var safeId = req.params.id.replace(/[^a-zA-Z0-9_-]/g, '');
+  var apkPath = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
+  var errPath = path.join(APK_DIR, 'coactiv-' + safeId + '.error');
   if (fs.existsSync(apkPath)) {
     return res.json({ site_id: safeId, status: 'ready', download_url: '/download/' + safeId, size_mb: (fs.statSync(apkPath).size / 1048576).toFixed(1) });
   }
-  if (fs.existsSync(errPath)) {
-    return res.json({ site_id: safeId, status: 'error', error: JSON.parse(fs.readFileSync(errPath, 'utf8')).error });
-  }
-  if (fs.existsSync(path.join(__dirname, 'builds', safeId))) {
-    return res.json({ site_id: safeId, status: 'building' });
-  }
+  if (fs.existsSync(errPath)) return res.json({ site_id: safeId, status: 'error', error: JSON.parse(fs.readFileSync(errPath, 'utf8')).error });
+  if (fs.existsSync(path.join(__dirname, 'builds', safeId))) return res.json({ site_id: safeId, status: 'building' });
   res.json({ site_id: safeId, status: 'not_found' });
 });
 
-app.get('/list', (req, res) => {
-  const files = fs.readdirSync(APK_DIR).filter(f => f.endsWith('.apk'));
-  res.json({ count: files.length, apks: files.map(f => ({ site_id: f.replace('coactiv-', '').replace('.apk', '') })) });
+app.get('/list', function(req, res) {
+  var files = fs.readdirSync(APK_DIR).filter(function(f) { return f.endsWith('.apk'); });
+  res.json({ count: files.length, apks: files.map(function(f) { return { site_id: f.replace('coactiv-', '').replace('.apk', '') }; }) });
 });
 
-// --- Build ---
-async function buildApk(safeId, siteId, siteName) {
-  const B = path.join(__dirname, 'builds', safeId);
-  const apkOut = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
-  const url = 'https://co-activ.netlify.app/push.html?site=' + siteId;
+// Delete endpoint to allow regeneration
+app.delete('/delete/:id', function(req, res) {
+  var safeId = req.params.id.replace(/[^a-zA-Z0-9_-]/g, '');
+  var apkPath = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
+  var errPath = path.join(APK_DIR, 'coactiv-' + safeId + '.error');
+  if (fs.existsSync(apkPath)) fs.unlinkSync(apkPath);
+  if (fs.existsSync(errPath)) fs.unlinkSync(errPath);
+  res.json({ success: true });
+});
 
-  console.log('\n=== BUILD START: ' + siteName + ' (' + safeId + ') ===');
+// Build
+function buildApk(safeId, siteId, siteName) {
+  var B = path.join(__dirname, 'builds', safeId);
+  var apkOut = path.join(APK_DIR, 'coactiv-' + safeId + '.apk');
+  var url = 'https://co-activ.netlify.app/push.html?site=' + siteId;
+
+  console.log('\n========================================');
+  console.log('BUILD START: ' + siteName + ' (' + safeId + ')');
+  console.log('========================================');
 
   try {
-    // 0. Clean
+    // Clean
     if (fs.existsSync(B)) fs.rmSync(B, { recursive: true, force: true });
     fs.mkdirSync(B, { recursive: true });
 
-    // Directories
-    const RES     = path.join(B, 'res');
-    const CRES    = path.join(B, 'compiled_res');
-    const RJAVA   = path.join(B, 'rjava');
-    const SRC     = path.join(B, 'src', 'com', 'coactiv', 'push');
-    const CLASSES = path.join(B, 'classes');
-    const DEX     = path.join(B, 'dex');
-    [RES, CRES, RJAVA, SRC, CLASSES, DEX].forEach(d => fs.mkdirSync(d, { recursive: true }));
+    var RES = path.join(B, 'res');
+    var CRES = path.join(B, 'compiled_res');
+    var RJAVA = path.join(B, 'rjava');
+    var SRC = path.join(B, 'src', 'com', 'coactiv', 'push');
+    var CLASSES = path.join(B, 'classes');
+    var DEX = path.join(B, 'dex');
+    [RES, CRES, RJAVA, SRC, CLASSES, DEX].forEach(function(d) { fs.mkdirSync(d, { recursive: true }); });
 
-    // 0a. Copy resources from template
+    // Copy resources
     copyDir(path.join(ANDROID_DIR, 'app/src/main/res'), RES);
 
-    // 0b. Write AndroidManifest.xml with site name
-    const manifestSrc = fs.readFileSync(path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml'), 'utf8');
-    fs.writeFileSync(path.join(B, 'AndroidManifest.xml'), manifestSrc.replace(/PLACEHOLDER_APP_NAME/g, 'Co-Activ ' + siteName));
+    // Write AndroidManifest.xml
+    var manifest = fs.readFileSync(path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml'), 'utf8');
+    manifest = manifest.replace(/PLACEHOLDER_APP_NAME/g, 'Co-Activ ' + siteName);
+    fs.writeFileSync(path.join(B, 'AndroidManifest.xml'), manifest);
 
-    // 0c. Write MainActivity.java with URL
-    const javaSrc = fs.readFileSync(path.join(ANDROID_DIR, 'app/src/main/java/com/coactiv/push/MainActivity.java'), 'utf8');
-    fs.writeFileSync(path.join(SRC, 'MainActivity.java'), javaSrc.replace(/PLACEHOLDER_URL/g, url));
+    // Write MainActivity.java with URL
+    var java = fs.readFileSync(path.join(ANDROID_DIR, 'app/src/main/java/com/coactiv/push/MainActivity.java'), 'utf8');
+    java = java.replace(/PLACEHOLDER_URL/g, url);
+    fs.writeFileSync(path.join(SRC, 'MainActivity.java'), java);
 
-    // Check android.jar
-    const androidJar = findAndroidJar();
+    var androidJar = findAndroidJar();
     if (!androidJar) throw new Error('android.jar not found');
+    console.log('android.jar: ' + androidJar);
 
-    // 1. aapt2 compile each resource file
-    console.log('  [1/7] aapt2 compile');
-    const resFiles = getAllFiles(RES);
-    let compiled = 0;
-    for (const f of resFiles) {
+    // Step 1: aapt2 compile
+    console.log('[1/7] aapt2 compile');
+    var resFiles = getAllFiles(RES);
+    var compiled = 0;
+    for (var i = 0; i < resFiles.length; i++) {
       try {
-        execSync(BUILD_TOOLS + '/aapt2 compile "' + f + '" -o "' + CRES + '"', { stdio: 'pipe' });
+        execSync(BUILD_TOOLS + '/aapt2 compile "' + resFiles[i] + '" -o "' + CRES + '"', { stdio: 'pipe' });
         compiled++;
-      } catch (e) { /* skip non-compilable files like .DS_Store */ }
+      } catch (e) {}
     }
-    console.log('     Compiled ' + compiled + ' resource files');
+    console.log('  Compiled ' + compiled + ' resources');
 
-    // 2. aapt2 link
-    console.log('  [2/7] aapt2 link');
-    const flatFiles = fs.readdirSync(CRES).filter(f => f.endsWith('.flat'));
-    console.log('     Found ' + flatFiles.length + ' flat files');
-    const flatPaths = flatFiles.map(f => '"' + path.join(CRES, f) + '"').join(' ');
-    const linkedApk = path.join(B, 'linked.apk');
-    execSync(BUILD_TOOLS + '/aapt2 link -o "' + linkedApk + '" -I "' + androidJar + '" --manifest "' + path.join(B, 'AndroidManifest.xml') + '" --java "' + RJAVA + '" ' + flatPaths, { stdio: 'pipe' });
+    // Step 2: aapt2 link
+    console.log('[2/7] aapt2 link');
+    var flatFiles = fs.readdirSync(CRES).filter(function(f) { return f.endsWith('.flat'); });
+    console.log('  Found ' + flatFiles.length + ' flat files');
+    var flatArgs = flatFiles.map(function(f) { return '"' + path.join(CRES, f) + '"'; }).join(' ');
+    var linkedApk = path.join(B, 'linked.apk');
+    execSync(BUILD_TOOLS + '/aapt2 link -o "' + linkedApk + '" -I "' + androidJar + '" --manifest "' + path.join(B, 'AndroidManifest.xml') + '" --java "' + RJAVA + '" ' + flatArgs, { stdio: 'pipe' });
+    console.log('  linked.apk: ' + fs.statSync(linkedApk).size + ' bytes');
 
-    // 3. javac - compile all .java files into CLASSES dir
-    console.log('  [3/7] javac');
-    const mainJava = path.join(SRC, 'MainActivity.java');
-    const rJavaList = getAllFiles(RJAVA).filter(f => f.endsWith('.java'));
-    console.log('     R.java files: ' + rJavaList.length);
-    const allJavaArgs = [mainJava].concat(rJavaList).map(f => '"' + f + '"').join(' ');
-    execSync('javac -encoding UTF-8 -source 1.8 -target 1.8 -cp "' + androidJar + '" -d "' + CLASSES + '" ' + allJavaArgs, { stdio: 'pipe' });
+    // Step 3: javac
+    console.log('[3/7] javac');
+    var mainJava = path.join(SRC, 'MainActivity.java');
+    var rJavaFiles = getAllFiles(RJAVA).filter(function(f) { return f.endsWith('.java'); });
+    console.log('  R.java files: ' + rJavaFiles.length);
+    rJavaFiles.forEach(function(f) { console.log('    ' + f); });
+    var allJava = [mainJava].concat(rJavaFiles);
+    var javaArgs = allJava.map(function(f) { return '"' + f + '"'; }).join(' ');
+    execSync('javac -encoding UTF-8 -source 1.8 -target 1.8 -cp "' + androidJar + '" -d "' + CLASSES + '" ' + javaArgs, { stdio: 'pipe' });
+    
+    var classFiles = getAllFiles(CLASSES).filter(function(f) { return f.endsWith('.class'); });
+    console.log('  Produced ' + classFiles.length + ' class files:');
+    classFiles.forEach(function(f) { console.log('    ' + path.relative(CLASSES, f)); });
 
-    // 3b. Log what javac produced
-    const classFiles = getAllFiles(CLASSES).filter(f => f.endsWith('.class'));
-    console.log('     Produced ' + classFiles.length + ' class files:');
-    classFiles.forEach(f => console.log('       ' + f.replace(CLASSES, '')));
-
-    // 4. d8 - convert .class to .dex via JAR (avoids duplicate class issues)
-    console.log('  [4/7] d8');
-    var jarFile = path.join(B, 'classes.jar');
+    // Step 4: d8 via JAR
+    console.log('[4/7] d8');
+    var jarFile = path.join(B, 'app-classes.jar');
     execSync('cd "' + CLASSES + '" && jar cf "' + jarFile + '" .', { stdio: 'pipe' });
-    console.log('     Created classes.jar: ' + (fs.statSync(jarFile).size / 1024).toFixed(1) + ' KB');
+    console.log('  app-classes.jar: ' + fs.statSync(jarFile).size + ' bytes');
     execSync(BUILD_TOOLS + '/d8 --lib "' + androidJar + '" --output "' + DEX + '" "' + jarFile + '"', { stdio: 'pipe' });
+    
+    var dexFile = path.join(DEX, 'classes.dex');
+    if (!fs.existsSync(dexFile)) throw new Error('classes.dex was not created by d8!');
+    console.log('  classes.dex: ' + fs.statSync(dexFile).size + ' bytes');
 
-    // 5. Assemble APK (add classes.dex to linked.apk)
-    console.log('  [5/7] assemble');
-    const unsignedApk = path.join(B, 'unsigned.apk');
+    // Step 5: Build APK
+    console.log('[5/7] assemble');
+    var unsignedApk = path.join(B, 'unsigned.apk');
     fs.copyFileSync(linkedApk, unsignedApk);
+    console.log('  unsigned.apk before dex: ' + fs.statSync(unsignedApk).size + ' bytes');
+    
+    // Add classes.dex to the APK
     execSync('cd "' + DEX + '" && zip -j "' + unsignedApk + '" classes.dex', { stdio: 'pipe' });
+    console.log('  unsigned.apk after dex: ' + fs.statSync(unsignedApk).size + ' bytes');
+    
+    // Verify classes.dex is in the APK
+    var zipList = execSync('unzip -l "' + unsignedApk + '"', { encoding: 'utf8' });
+    console.log('  APK contents:');
+    console.log(zipList);
 
-    // 6. zipalign
-    console.log('  [6/7] zipalign');
-    const alignedApk = path.join(B, 'aligned.apk');
+    // Step 6: zipalign
+    console.log('[6/7] zipalign');
+    var alignedApk = path.join(B, 'aligned.apk');
     execSync(BUILD_TOOLS + '/zipalign -f 4 "' + unsignedApk + '" "' + alignedApk + '"', { stdio: 'pipe' });
+    console.log('  aligned.apk: ' + fs.statSync(alignedApk).size + ' bytes');
 
-    // 7. apksigner
-    console.log('  [7/7] apksigner');
-    const signedApk = path.join(B, 'signed.apk');
+    // Step 7: sign
+    console.log('[7/7] apksigner');
+    var signedApk = path.join(B, 'signed.apk');
     execSync(BUILD_TOOLS + '/apksigner sign --ks "' + KEYSTORE_PATH + '" --ks-key-alias coactiv --ks-pass pass:' + KEYSTORE_PASS + ' --key-pass pass:' + KEYSTORE_PASS + ' --out "' + signedApk + '" "' + alignedApk + '"', { stdio: 'pipe' });
+    console.log('  signed.apk: ' + fs.statSync(signedApk).size + ' bytes');
 
-    // Done
+    // Verify
+    try {
+      var verifyOut = execSync(BUILD_TOOLS + '/apksigner verify "' + signedApk + '"', { encoding: 'utf8' });
+      console.log('  Signature verify: OK');
+    } catch(ve) {
+      console.log('  Signature verify WARNING: ' + ve.message);
+    }
+
     fs.copyFileSync(signedApk, apkOut);
-    console.log('=== BUILD OK: ' + (fs.statSync(apkOut).size / 1048576).toFixed(1) + ' Mo ===');
+    var finalSize = fs.statSync(apkOut).size;
+    console.log('========================================');
+    console.log('BUILD OK: ' + (finalSize / 1024).toFixed(1) + ' KB');
+    console.log('========================================');
+
+    if (finalSize < 1000) {
+      console.log('WARNING: APK is suspiciously small! Something may be wrong.');
+    }
 
   } catch (err) {
-    console.error('=== BUILD FAIL: ' + err.message + ' ===');
-    if (err.stderr) console.error('STDERR: ' + err.stderr.toString().substring(0, 500));
+    console.log('========================================');
+    console.log('BUILD FAIL: ' + err.message);
+    console.log('========================================');
+    if (err.stderr) console.log('STDERR: ' + err.stderr.toString().substring(0, 1000));
     fs.writeFileSync(path.join(APK_DIR, 'coactiv-' + safeId + '.error'), JSON.stringify({ error: err.message.substring(0, 500) }));
   } finally {
     try { if (fs.existsSync(B)) fs.rmSync(B, { recursive: true, force: true }); } catch (e) {}
@@ -172,7 +215,7 @@ async function buildApk(safeId, siteId, siteName) {
 }
 
 function findAndroidJar() {
-  const p = path.join(ANDROID_HOME, 'platforms', 'android-33', 'android.jar');
+  var p = path.join(ANDROID_HOME, 'platforms', 'android-33', 'android.jar');
   if (fs.existsSync(p)) return p;
   try {
     execSync(ANDROID_HOME + '/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" --sdk_root=' + ANDROID_HOME, { stdio: 'pipe' });
@@ -183,10 +226,11 @@ function findAndroidJar() {
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, e.name);
-    const d = path.join(dest, e.name);
-    if (e.isDirectory()) copyDir(s, d);
+  var entries = fs.readdirSync(src, { withFileTypes: true });
+  for (var i = 0; i < entries.length; i++) {
+    var s = path.join(src, entries[i].name);
+    var d = path.join(dest, entries[i].name);
+    if (entries[i].isDirectory()) copyDir(s, d);
     else fs.copyFileSync(s, d);
   }
 }
