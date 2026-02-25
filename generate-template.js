@@ -1,11 +1,31 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const https = require('https');
 
 const TEMPLATE_DIR = path.join(__dirname, 'template');
 const ANDROID_DIR = path.join(TEMPLATE_DIR, 'android-project');
 
-function generateTemplate() {
+// Download the real Co-Activ icon from Netlify
+function downloadIcon(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      // Follow redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadIcon(res.headers.location).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`Failed to download icon: HTTP ${res.statusCode}`));
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+      res.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+async function generateTemplate() {
   console.log('Generating Android template...');
 
   const dirs = [
@@ -131,8 +151,17 @@ public class MainActivity extends Activity {
     </domain-config>
 </network-security-config>`);
 
-  // Default icon PNG (48x48 green)
-  const icon = createIcon();
+  // Download the REAL Co-Activ icon from Netlify
+  let icon;
+  try {
+    console.log('Downloading Co-Activ icon from Netlify...');
+    icon = await downloadIcon('https://co-activ.netlify.app/icon.png');
+    console.log(`Icon downloaded: ${icon.length} bytes`);
+  } catch (err) {
+    console.warn('Failed to download icon, using fallback:', err.message);
+    icon = createFallbackIcon();
+  }
+
   ['mipmap-hdpi','mipmap-mdpi','mipmap-xhdpi','mipmap-xxhdpi','mipmap-xxxhdpi'].forEach(d => {
     fs.writeFileSync(path.join(ANDROID_DIR, 'app/src/main/res', d, 'ic_launcher.png'), icon);
   });
@@ -140,7 +169,8 @@ public class MainActivity extends Activity {
   console.log('Template ready');
 }
 
-function createIcon() {
+// Fallback icon only used if download fails
+function createFallbackIcon() {
   const zlib = require('zlib');
   const w = 48, h = 48;
   function crc32(buf) {
