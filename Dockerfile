@@ -1,9 +1,11 @@
 FROM node:18-bullseye
 
+# Outils système
 RUN apt-get update && \
-    apt-get install -y wget unzip zip && \
+    apt-get install -y wget unzip zip curl git && \
     rm -rf /var/lib/apt/lists/*
 
+# Java 17
 RUN mkdir -p /opt/java && cd /opt/java && \
     wget -q "https://download.oracle.com/java/17/archive/jdk-17.0.12_linux-x64_bin.tar.gz" -O jdk.tar.gz && \
     tar xzf jdk.tar.gz && rm jdk.tar.gz
@@ -11,8 +13,9 @@ RUN mkdir -p /opt/java && cd /opt/java && \
 ENV JAVA_HOME=/opt/java/jdk-17.0.12
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
+# Android SDK
 ENV ANDROID_HOME=/opt/android-sdk
-ENV PATH="${PATH}:${ANDROID_HOME}/build-tools/33.0.2:${ANDROID_HOME}/cmdline-tools/latest/bin"
+ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/build-tools/33.0.2:${ANDROID_HOME}/platform-tools:${PATH}"
 
 RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
     cd ${ANDROID_HOME}/cmdline-tools && \
@@ -20,14 +23,22 @@ RUN mkdir -p ${ANDROID_HOME}/cmdline-tools && \
     unzip -q tools.zip && mv cmdline-tools latest && rm tools.zip
 
 RUN yes | sdkmanager --licenses --sdk_root=${ANDROID_HOME} > /dev/null 2>&1 || true
-RUN sdkmanager "build-tools;33.0.2" "platforms;android-33" --sdk_root=${ANDROID_HOME}
+RUN sdkmanager "build-tools;33.0.2" "platforms;android-33" "platform-tools" --sdk_root=${ANDROID_HOME}
+
+# Bubblewrap CLI global
+RUN npm install -g @bubblewrap/cli@latest
+
+# Pré-configurer Bubblewrap (évite les prompts interactifs)
+RUN mkdir -p /root/.bubblewrap && echo '{"jdkPath":"'${JAVA_HOME}'","androidSdkPath":"'${ANDROID_HOME}'"}' > /root/.bubblewrap/config.json
 
 WORKDIR /app
 COPY package.json ./
 RUN npm install --production
 COPY . .
+
 RUN mkdir -p apks builds keystore
 
+# Générer le keystore de signature
 RUN keytool -genkeypair -v \
     -keystore keystore/coactiv.keystore \
     -alias coactiv \
